@@ -142,10 +142,11 @@ void shift() {
 	//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
 	float distOQ = acosh(-lorentz(Q, O));
 	
-	vec3 V;
-	if (distOQ != 0) {
-		V = (Q - (O * cosh(distOQ))) / sinh(distOQ);
+	if (distOQ == 0) {		// to avoid dividing by zero
+		return;
 	}
+
+	vec3 V = (Q - (O * cosh(distOQ))) / sinh(distOQ);
 
 	vec3 m1 = (O * cosh(distOQ / 4)) + (V * sinh(distOQ / 4));
 
@@ -157,12 +158,22 @@ void shift() {
 		n.x = nodes3D[i].x;
 		n.y = nodes3D[i].y;
 		n.z = nodes3D[i].z;
-		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+		printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 		float distnm1 = acosh(-lorentz(m1, n));
+
+		if (distnm1 == 0) {		// to avoid dividing by zero
+			return;
+		}
+
 		vec3 V1 = (m1 - (n * cosh(distnm1))) / sinh(distnm1);
 		vec3 n1 = (n * cosh(distnm1 * 2)) + (V1 * sinh(distnm1 * 2));
 
 		float distnm2 = acosh(-lorentz(m2, n1));
+
+		if (distnm2 == 0) {		// to avoid dividing by zero
+			return;
+		}
+
 		vec3 V2 = (m2 - (n1 * cosh(distnm2))) / sinh(distnm2);
 		vec3 n2 = (n1 * cosh(distnm2 * 2)) + (V2 * sinh(distnm2 * 2));
 
@@ -283,7 +294,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 
 
-	if (mousePosition.x * mousePosition.x + mousePosition.y * mousePosition.y >= 1)
+	if (cX * cX + cY * cY >= 1)
 		return;
 
 	printf("%f x  %f y\n", oldMousePosition.x, oldMousePosition.y);
@@ -293,9 +304,8 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	oldMousePosition.x = cX;
 	oldMousePosition.y = cY;
 	
-	//printf("\n%f : MOUSEDELTA.X     %f: MOUSEDELTA.Y\n", mouseDelta.x, mouseDelta.y);
+	//printf("\n%f : MOUSEDELTA.X     %f: MOUSEDELTA.Y\n", oldMousePosition.x, oldMousePosition.y);
 	shift();
-
 
 	glutPostRedisplay();
 }
@@ -305,6 +315,9 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	// Convert to normalized device space
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
+
+	if (cX * cX + cY * cY >= 1)
+		return;
 
 	char * buttonStat;
 	switch (state) {
