@@ -72,6 +72,7 @@ vec2 edges[requiredEdges * 2];		// one edge has 2 nodes
 vec2 oldMousePosition;
 vec2 mousePosition;
 
+
 void changeColor(float r, float g, float b) {
 	int location = glGetUniformLocation(gpuProgram.getId(), "color");
 	glUniform3f(location, r, g, b); // 3 floats
@@ -127,10 +128,58 @@ void generateGraph() {
 	}
 }
 
+void updateNodes() {
+	for (int i = 0; i < 50; i++) {
+		nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
+		nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
+	}
+}
+
+void updateEdges() {
+	int index = 0;
+	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
+		for (int j = 0; j < 50; j++) {
+			if (neighbourMatrix[i][j] == 1) {
+				edges[index++] = nodes2D[i];
+				edges[index++] = nodes2D[j];
+			}
+		}
+	}
+}
+
+void updateGraph() {
+	updateNodes();
+	updateEdges();
+}
+
+void drawCircle() {
+	
+	vec2 vertices[100];
+	for (int j = 0; j < 50; j++) {
+		for (int i = 0; i < 100; i++) {
+			float fi = i * 2 * M_PI / 100;
+			vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
+			float z = sqrt(1 + vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y);
+			vertices[i] = vertices[i] / z;
+		}
+
+		glBindVertexArray(vaoNode);  // Draw call
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(vec2) * 100,  // # bytes
+			vertices,	      	// address
+			GL_STATIC_DRAW);	// we do not change later
+
+		glEnableVertexAttribArray(0);  // AttribArray 0
+		glVertexAttribPointer(0,       // vbo -> AttribArray 0
+			2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
+			0, NULL); 		     // stride, offset: tightly packed
+		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 100 /*# Elements*/);
+	}
+}
+
 float lorentz(vec3 p1, vec3 p2) {
 	return p1.x * p2.x + p1.y * p2.y - p1.z * p2.z;
 }
-
 
 void shift() {
 	vec3 O(0.0f, 0.0f, 1.0f);
@@ -158,7 +207,7 @@ void shift() {
 		n.x = nodes3D[i].x;
 		n.y = nodes3D[i].y;
 		n.z = nodes3D[i].z;
-		printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 		float distnm1 = acosh(-lorentz(m1, n));
 
 		if (distnm1 == 0) {		// to avoid dividing by zero
@@ -184,39 +233,14 @@ void shift() {
 
 }
 
-
-
 void drawGraph() {
 
-	for (int i = 0; i < 50; i++) {
-		nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
-		nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
-	}
-
-	int index = 0;
-	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
-		for (int j = 0; j < 50; j++) {
-			if (neighbourMatrix[i][j] == 1) {
-				edges[index++] = nodes2D[i];
-				edges[index++] = nodes2D[j];
-			}
-		}
-	}
+	updateGraph();
 
 	// Set color to (0, 1, 0) = green
 	changeColor(1.0f, 0.0f, 0.0f);
 
-	glBindVertexArray(vaoNode);  // Draw call
-	glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-		sizeof(nodes2D),  // # bytes
-		nodes2D,	      	// address
-		GL_STATIC_DRAW);	// we do not change later
-
-	glEnableVertexAttribArray(0);  // AttribArray 0
-	glVertexAttribPointer(0,       // vbo -> AttribArray 0
-		2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
-		0, NULL); 		     // stride, offset: tightly packed
-	glDrawArrays(GL_POINTS, 0 /*startIdx*/, 50 /*# Elements*/);
+	drawCircle();
 	
 	// Set color to (1, 1, 0) = yellow
 	changeColor(1.0f, 1.0f, 0.0f);	
@@ -234,7 +258,6 @@ void drawGraph() {
 	glDrawArrays(GL_LINES, 0, requiredEdges);
 
 }
-
 
 
 
@@ -262,6 +285,7 @@ void onInitialization() {
 	glBindBuffer(GL_ARRAY_BUFFER, vboEdge);
 	
 	generateGraph();
+
 	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
 }
@@ -286,7 +310,6 @@ void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
 
 
-
 // Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
 	// Convert to normalized device space
@@ -297,7 +320,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	if (cX * cX + cY * cY >= 1)
 		return;
 
-	printf("%f x  %f y\n", oldMousePosition.x, oldMousePosition.y);
+	//printf("%f x  %f y\n", oldMousePosition.x, oldMousePosition.y);
 	mousePosition.x = cX - oldMousePosition.x;
 	mousePosition.y = cY - oldMousePosition.y;
 
@@ -306,7 +329,6 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	
 	//printf("\n%f : MOUSEDELTA.X     %f: MOUSEDELTA.Y\n", oldMousePosition.x, oldMousePosition.y);
 	shift();
-
 	glutPostRedisplay();
 }
 
