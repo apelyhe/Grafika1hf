@@ -50,60 +50,53 @@ const char * const vertexSource = R"(
 	}
 )";
 
-// fragment shader in GLSL
-const char * const fragmentSource = R"(
-	#version 330			// Shader 3.3
-	precision highp float;	// normal floats, makes no difference on desktop computers
-	
-	uniform vec3 color;		// uniform variable, the color of the primitive
-	out vec4 outColor;		// computed color of the current pixel
-
-	void main() {
-		outColor = vec4(color, 1);	// computed color is the color of the primitive
-	}
-)";
 
 // fragment shader in GLSL
-/*
+
 const char* fragmentSource = R"(
 	#version 330
     precision highp float;
 
 	uniform sampler2D textureUnit;
-	uniform int isGPUProcedural;
+	uniform int colorOrTexture;		// if not 0, use texturing	
+	uniform vec3 color;
 
 	in vec2 texCoord;			// variable input: interpolated texture coordinates
 	out vec4 fragmentColor;		// output that goes to the raster memory as told by glBindFragDataLocation
 
 	void main() {
-		if (isGPUProcedural != 0) {
+		if (colorOrTexture != 0) {
 			fragmentColor = texture(textureUnit, texCoord);
 		} else {
 			fragmentColor = vec4(color, 1);			// computed 
 		}
 	}
-)";*/
+)";
 
 
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoNode;	   // virtual world on the GPU
 unsigned int vaoEdge;	   // virtual world on the GPU
+unsigned int vaoTexture;
 
 class Graph {
 public:
+
 	vec2 nodes2D[50];		// 50 points with x and y coordinates
 	vec3 nodes3D[50];
 	int neighbourMatrix[50][50] = { 0 };
-	vec2 edges[61 * 2];		// 5% fullness means 61 edges, one edge has 2 nodes
+	vec2 edges[61 * 2];		// 5% fullness means 61 edges, and each one has 2 endpoints
+	Texture* textures[50];
 
 	Graph() {
 		generateGraph();
+		generateTextures();
 	}
 
 	void draw() {
 		updateGraph();
-		drawNodes();
 		drawEdges();
+		drawNodes();
 	}
 
 	void generateGraph() {
@@ -147,6 +140,24 @@ public:
 			}
 		}
 	}
+
+	void generateTextures() {
+		int width = 8, height = 8;				// create checkerboard texture procedurally
+		std::vector<vec4> image(width * height);
+
+		for (int i = 0; i < 50; i++) {				
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					float red = ((float)rand() / RAND_MAX);	//random red component
+					float green = ((float)rand() / RAND_MAX);		//random green component
+					float blue = ((float)rand() / RAND_MAX);		//random blue component
+					image[y * width + x] = vec4(red, green, blue, 1);			//creating an image, with the random color
+				}
+			}
+			textures[i] = new Texture(width, height, image);		// add the image to the textures array
+		}
+
+	}
 	
 	void updateNodes() {
 		for (int i = 0; i < 50; i++) {
@@ -168,28 +179,37 @@ public:
 	}
 
 	void updateGraph() {
-		updateNodes();
 		updateEdges();
+		updateNodes();
 	}
 
 	void drawNodes() {
 		// Set color to (0, 1, 0) = green
 		changeColor(1.0f, 0.0f, 0.0f);
 
-		vec2 vertices[100];
+		vec2 circlePoints[100];
+		
+		vec2 vertices[8]; 
 
 		for (int j = 0; j < 50; j++) {
 			for (int i = 0; i < 100; i++) {
 				float fi = i * 2 * M_PI / 100;
-				vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
-				float z = sqrt(1 + vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y);
-				vertices[i] = vertices[i] / z;
+				circlePoints[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
+				float z = sqrt(1 + circlePoints[i].x * circlePoints[i].x + circlePoints[i].y * circlePoints[i].y);
+				circlePoints[i] = circlePoints[i] / z;
 			}
+
+			vertices[0] = circlePoints[24];			vertices[5] = vec2(0, 0);
+			vertices[1] = circlePoints[49];			vertices[6] = vec2(1, 0);
+			vertices[2] = circlePoints[74];			vertices[7] = vec2(1, 1);
+			vertices[3] = circlePoints[99];			vertices[8] = vec2(0, 1);
+
+			gpuProgram.setUniform(0, "colorOrTexture");
 
 			glBindVertexArray(vaoNode);  // Draw call
 			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
 				sizeof(vec2) * 100,  // # bytes
-				vertices,	      	// address
+				circlePoints,	      	// address
 				GL_STATIC_DRAW);	// we do not change later
 
 			glEnableVertexAttribArray(0);  // AttribArray 0
@@ -197,6 +217,26 @@ public:
 				2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
 				0, NULL); 		     // stride, offset: tightly packed
 			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 100 /*# Elements*/);
+			
+			gpuProgram.setUniform((*textures[j]), "textureUnit");
+			gpuProgram.setUniform(1, "colorOrTexture");
+			glBufferData(GL_ARRAY_BUFFER,
+				sizeof(vertices),
+				vertices,
+				GL_STATIC_DRAW);
+
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0,
+				2, GL_FLOAT, GL_FALSE,
+				0, NULL);
+
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1,
+				2, GL_FLOAT, GL_FALSE,
+				0, (void*)(4 * sizeof(vec2)));
+			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 4 /*# Elements*/);
+
+
 		}
 	}
 	
@@ -231,85 +271,11 @@ public:
 	}
 };
 
-class TexturedQuad {
-	unsigned int vaoTexture, vboTexture[2];
-	vec2 vertices[4], uvs[4];
-	Texture texture;
-public:
-	TexturedQuad() {
-		vertices[0] = vec2(-1, -1); uvs[0] = vec2(0, 0);
-		vertices[1] = vec2(1, -1);  uvs[1] = vec2(1, 0);
-		vertices[2] = vec2(1, 1);   uvs[2] = vec2(1, 1);
-		vertices[3] = vec2(-1, 1);  uvs[3] = vec2(0, 1);
-
-		glGenVertexArrays(1, &vaoTexture);	// create 1 vertex array object
-		glBindVertexArray(vaoTexture);		// make it active
-
-		glGenBuffers(2, vboTexture);	// Generate 1 vertex buffer objects
-
-		// vertex coordinates: vbo[0] -> Attrib Array 0 -> vertexPosition of the vertex shader
-		glBindBuffer(GL_ARRAY_BUFFER, vboTexture[0]); // make it active, it is an array
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed
-
-		// vertex coordinates: vbo[1] -> Attrib Array 1 -> vertexUV of the vertex shader
-		glBindBuffer(GL_ARRAY_BUFFER, vboTexture[1]); // make it active, it is an array
-		glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed		
-	}
-
-	/*void MoveVertex(float cX, float cY) {
-		vec4 wCursor4 = vec4(cX, cY, 0, 1) * camera.Pinv() * camera.Vinv();
-		vec2 wCursor(wCursor4.x, wCursor4.y);
-
-		int closestVertex = 0;
-		float distMin = length(vertices[0] - wCursor);
-		for (int i = 1; i < 4; i++) {
-			float dist = length(vertices[i] - wCursor);
-			if (dist < distMin) {
-				distMin = dist;
-				closestVertex = i;
-			}
-		}
-		vertices[closestVertex] = wCursor;
-
-		// copy data to the GPU
-		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);	   // copy to that part of the memory which is modified 
-	}*/
-
-	void Draw() {
-		mat4 MVPTransform = { 1, 0, 0, 0,    // MVP matrix, 
-							  0, 1, 0, 0,    // row-major!
-							  0, 0, 1, 0,
-							  0, 0, 0, 1 };
-		gpuProgram.setUniform(MVPTransform, "MVP");
-		
-		glBindVertexArray(vaoTexture);	// make the vao and its vbos active playing the role of the data source
-		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);	// draw two triangles forming a quad
-	}
-};
 
 vec2 oldMousePosition;
 vec2 mousePosition;
 
 Graph* graph;
-TexturedQuad* quad;
-
-void changeColor(float r, float g, float b) {
-	int location = glGetUniformLocation(gpuProgram.getId(), "color");
-	glUniform3f(location, r, g, b); // 3 floats
-
-	float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix, 
-							  0, 1, 0, 0,    // row-major!
-							  0, 0, 1, 0,
-							  0, 0, 0, 1 };
-
-	location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
-}
 
 float lorentz(vec3 p1, vec3 p2) {
 	return p1.x * p2.x + p1.y * p2.y - p1.z * p2.z;
@@ -394,12 +360,11 @@ void onInitialization() {
 	glGenBuffers(1, &vboEdge);	// Generate 1 buffer
 	glBindBuffer(GL_ARRAY_BUFFER, vboEdge);
 	
-	
 	// create program for the GPU
-	gpuProgram.create(vertexSource, fragmentSource, "outColor");
 	gpuProgram.create(vertexSource, fragmentSource, "fragmentColor");
 
 	graph = new Graph();
+
 }
 
 // Window has become invalid: Redraw
@@ -407,7 +372,6 @@ void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
 	graph->draw();
-	//quad->Draw();
 	glutSwapBuffers(); // exchange buffers for double buffering 
 }
 
