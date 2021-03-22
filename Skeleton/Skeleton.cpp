@@ -63,15 +63,19 @@ GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoNode;	   // virtual world on the GPU
 unsigned int vaoEdge;	   // virtual world on the GPU
 
-vec2 nodes2D[50];		// 50 points with x and y coordinates
-vec3 nodes3D[50];		
-const int requiredEdges = (50 * 49 / 2) * 0.05;		// number of edges required
-int neighbourMatrix[50][50] = { 0 };
-vec2 edges[requiredEdges * 2];		// one edge has 2 nodes
+class Graph {
+public:
+	vec2 nodes2D[50];		// 50 points with x and y coordinates
+	vec3 nodes3D[50];
+	int neighbourMatrix[50][50] = { 0 };
+	vec2 edges[61 * 2];		// 5% fullness means 61 edges, one edge has 2 nodes
+
+};
 
 vec2 oldMousePosition;
 vec2 mousePosition;
 
+Graph graph;
 
 void changeColor(float r, float g, float b) {
 	int location = glGetUniformLocation(gpuProgram.getId(), "color");
@@ -92,25 +96,25 @@ void generateGraph() {
 	for (int i = 0; i < 50; i++) {
 		float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
 		float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
-		nodes3D[i].x = randomX;
-		nodes3D[i].y = randomY;
-		nodes3D[i].z = sqrt(nodes3D[i].x * nodes3D[i].x + nodes3D[i].y * nodes3D[i].y + 1);
+		graph.nodes3D[i].x = randomX;
+		graph.nodes3D[i].y = randomY;
+		graph.nodes3D[i].z = sqrt(graph.nodes3D[i].x * graph.nodes3D[i].x + graph.nodes3D[i].y * graph.nodes3D[i].y + 1);
 	}
 
 	// making a 2D graph from the hiperbolic one
 	for (int i = 0; i < 50; i++) {
-		nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
-		nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
+		graph.nodes2D[i].x = graph.nodes3D[i].x / graph.nodes3D[i].z;
+		graph.nodes2D[i].y = graph.nodes3D[i].y / graph.nodes3D[i].z;
 	}
 
 
-	int remainingEdges = requiredEdges;
+	int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
 	while (true) {
 		int i = rand() % 51;			// a random point of the matrix
 		int j = rand() % 51;			// another random point of the matrix
 
-		if (i != j && neighbourMatrix[i][j] == 0) {
-			neighbourMatrix[i][j] = 1;
+		if (i != j && graph.neighbourMatrix[i][j] == 0) {
+			graph.neighbourMatrix[i][j] = 1;
 			remainingEdges--;
 			if (remainingEdges == 0)
 				break;
@@ -120,9 +124,9 @@ void generateGraph() {
 	int index = 0;
 	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
 		for (int j = 0; j < 50; j++) {
-			if (neighbourMatrix[i][j] == 1) {
-				edges[index++] = nodes2D[i];
-				edges[index++] = nodes2D[j];
+			if (graph.neighbourMatrix[i][j] == 1) {
+				graph.edges[index++] = graph.nodes2D[i];
+				graph.edges[index++] = graph.nodes2D[j];
 			}
 		}
 	}
@@ -130,8 +134,8 @@ void generateGraph() {
 
 void updateNodes() {
 	for (int i = 0; i < 50; i++) {
-		nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
-		nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
+		graph.nodes2D[i].x = graph.nodes3D[i].x / graph.nodes3D[i].z;
+		graph.nodes2D[i].y = graph.nodes3D[i].y / graph.nodes3D[i].z;
 	}
 }
 
@@ -139,9 +143,9 @@ void updateEdges() {
 	int index = 0;
 	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
 		for (int j = 0; j < 50; j++) {
-			if (neighbourMatrix[i][j] == 1) {
-				edges[index++] = nodes2D[i];
-				edges[index++] = nodes2D[j];
+			if (graph.neighbourMatrix[i][j] == 1) {
+				graph.edges[index++] = graph.nodes2D[i];
+				graph.edges[index++] = graph.nodes2D[j];
 			}
 		}
 	}
@@ -158,7 +162,7 @@ void drawCircle() {
 	for (int j = 0; j < 50; j++) {
 		for (int i = 0; i < 100; i++) {
 			float fi = i * 2 * M_PI / 100;
-			vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
+			vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(graph.nodes3D[j].x, graph.nodes3D[j].y));
 			float z = sqrt(1 + vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y);
 			vertices[i] = vertices[i] / z;
 		}
@@ -191,7 +195,7 @@ void shift() {
 	//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
 	float distOQ = acosh(-lorentz(Q, O));
 	
-	if (distOQ == 0) {		// to avoid dividing by zero
+	if (distOQ == 0.0f) {		// to avoid dividing by zero
 		return;
 	}
 
@@ -204,13 +208,15 @@ void shift() {
 	vec3 n;
 	for (int i = 0; i < 50; i++) {
 
-		n.x = nodes3D[i].x;
-		n.y = nodes3D[i].y;
-		n.z = nodes3D[i].z;
+		n.x = graph.nodes3D[i].x;
+		n.y = graph.nodes3D[i].y;
+		n.z = graph.nodes3D[i].z;
+
 		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+		
 		float distnm1 = acosh(-lorentz(m1, n));
 
-		if (distnm1 == 0) {		// to avoid dividing by zero
+		if (distnm1 == 0.0f) {		// to avoid dividing by zero
 			return;
 		}
 
@@ -219,16 +225,16 @@ void shift() {
 
 		float distnm2 = acosh(-lorentz(m2, n1));
 
-		if (distnm2 == 0) {		// to avoid dividing by zero
+		if (distnm2 == 0.0f) {		// to avoid dividing by zero
 			return;
 		}
 
 		vec3 V2 = (m2 - (n1 * cosh(distnm2))) / sinh(distnm2);
 		vec3 n2 = (n1 * cosh(distnm2 * 2)) + (V2 * sinh(distnm2 * 2));
 
-		nodes3D[i].x = n2.x;
-		nodes3D[i].y = n2.y;
-		nodes3D[i].z = n2.z;
+		graph.nodes3D[i].x = n2.x;
+		graph.nodes3D[i].y = n2.y;
+		graph.nodes3D[i].z = n2.z;
 	}
 
 }
@@ -247,15 +253,15 @@ void drawGraph() {
 
 	glBindVertexArray(vaoEdge);  // Draw call
 	glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-		sizeof(edges),  // # bytes
-		edges,	      	// address
+		sizeof(graph.edges),  // # bytes
+		graph.edges,	      	// address
 		GL_STATIC_DRAW);	// we do not change later
 
 	glEnableVertexAttribArray(0);  // AttribArray 0
 	glVertexAttribPointer(0,       // vbo -> AttribArray 0
 		2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
 		0, NULL); 		     // stride, offset: tightly packed
-	glDrawArrays(GL_LINES, 0, requiredEdges);
+	glDrawArrays(GL_LINES, 0, 61);
 
 }
 
@@ -290,8 +296,6 @@ void onInitialization() {
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
 }
 
-
-
 // Window has become invalid: Redraw
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
@@ -300,7 +304,6 @@ void onDisplay() {
 	glutSwapBuffers(); // exchange buffers for double buffering 
 }
 
-
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 }
@@ -308,7 +311,6 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
 }
-
 
 // Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
