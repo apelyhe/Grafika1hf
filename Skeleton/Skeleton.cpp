@@ -107,7 +107,7 @@ public:
 			float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
 			nodes3D[i].x = randomX;
 			nodes3D[i].y = randomY;
-			nodes3D[i].z = sqrt(nodes3D[i].x * nodes3D[i].x + nodes3D[i].y * nodes3D[i].y + 1);
+			nodes3D[i].z = sqrt(nodes3D[i].x * nodes3D[i].x + nodes3D[i].y * nodes3D[i].y + 1.0f);
 		}
 
 		// making a 2D graph from the hiperbolic one
@@ -189,7 +189,8 @@ public:
 
 		vec2 circlePoints[100];
 		
-		vec2 vertices[8]; 
+		vec2 vertices[4];
+		vec2 uv[4];
 
 		for (int j = 0; j < 50; j++) {
 			for (int i = 0; i < 100; i++) {
@@ -199,10 +200,10 @@ public:
 				circlePoints[i] = circlePoints[i] / z;
 			}
 
-			vertices[0] = circlePoints[24];			vertices[5] = vec2(0, 0);
-			vertices[1] = circlePoints[49];			vertices[6] = vec2(1, 0);
-			vertices[2] = circlePoints[74];			vertices[7] = vec2(1, 1);
-			vertices[3] = circlePoints[99];			vertices[8] = vec2(0, 1);
+			vertices[0] = circlePoints[24];						
+			vertices[1] = circlePoints[49];			
+			vertices[2] = circlePoints[74];			
+			vertices[3] = circlePoints[99];			
 
 			gpuProgram.setUniform(0, "colorOrTexture");
 
@@ -229,15 +230,12 @@ public:
 			glVertexAttribPointer(0,
 				2, GL_FLOAT, GL_FALSE,
 				0, NULL);
-
-			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1,
-				2, GL_FLOAT, GL_FALSE,
-				0, (void*)(4 * sizeof(vec2)));
 			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 4 /*# Elements*/);
 
 
 		}
+
+		gpuProgram.setUniform(0, "colorOrTexture");
 	}
 	
 	void drawEdges() {
