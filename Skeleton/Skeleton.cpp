@@ -40,8 +40,12 @@ const char * const vertexSource = R"(
 
 	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
 	layout(location = 0) in vec2 vp;	// Varying input: vp = vertex position is expected in attrib array 0
+	layout(location = 1) in vec2 vertexUV;			// Attrib Array 1
+
+	out vec2 texCoord;								// output attribute
 
 	void main() {
+		texCoord = vertexUV;
 		gl_Position = vec4(vp.x, vp.y, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
 	}
 )";
@@ -59,6 +63,28 @@ const char * const fragmentSource = R"(
 	}
 )";
 
+// fragment shader in GLSL
+/*
+const char* fragmentSource = R"(
+	#version 330
+    precision highp float;
+
+	uniform sampler2D textureUnit;
+	uniform int isGPUProcedural;
+
+	in vec2 texCoord;			// variable input: interpolated texture coordinates
+	out vec4 fragmentColor;		// output that goes to the raster memory as told by glBindFragDataLocation
+
+	void main() {
+		if (isGPUProcedural != 0) {
+			fragmentColor = texture(textureUnit, texCoord);
+		} else {
+			fragmentColor = vec4(color, 1);			// computed 
+		}
+	}
+)";*/
+
+
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoNode;	   // virtual world on the GPU
 unsigned int vaoEdge;	   // virtual world on the GPU
@@ -70,12 +96,207 @@ public:
 	int neighbourMatrix[50][50] = { 0 };
 	vec2 edges[61 * 2];		// 5% fullness means 61 edges, one edge has 2 nodes
 
+	Graph() {
+		generateGraph();
+	}
+
+	void draw() {
+		updateGraph();
+		drawNodes();
+		drawEdges();
+	}
+
+	void generateGraph() {
+
+		// generating graph with x, y, z coordinates
+		for (int i = 0; i < 50; i++) {
+			float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
+			float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
+			nodes3D[i].x = randomX;
+			nodes3D[i].y = randomY;
+			nodes3D[i].z = sqrt(nodes3D[i].x * nodes3D[i].x + nodes3D[i].y * nodes3D[i].y + 1);
+		}
+
+		// making a 2D graph from the hiperbolic one
+		for (int i = 0; i < 50; i++) {
+			nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
+			nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
+		}
+
+
+		int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
+		while (true) {
+			int i = rand() % 51;			// a random point of the matrix
+			int j = rand() % 51;			// another random point of the matrix
+
+			if (i != j && neighbourMatrix[i][j] == 0) {
+				neighbourMatrix[i][j] = 1;
+				remainingEdges--;
+				if (remainingEdges == 0)
+					break;
+			}
+		}
+
+		int index = 0;
+		for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
+			for (int j = 0; j < 50; j++) {
+				if (neighbourMatrix[i][j] == 1) {
+					edges[index++] = nodes2D[i];
+					edges[index++] = nodes2D[j];
+				}
+			}
+		}
+	}
+	
+	void updateNodes() {
+		for (int i = 0; i < 50; i++) {
+			nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
+			nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
+		}
+	}
+
+	void updateEdges() {
+		int index = 0;
+		for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
+			for (int j = 0; j < 50; j++) {
+				if (neighbourMatrix[i][j] == 1) {
+					edges[index++] = nodes2D[i];
+					edges[index++] = nodes2D[j];
+				}
+			}
+		}
+	}
+
+	void updateGraph() {
+		updateNodes();
+		updateEdges();
+	}
+
+	void drawNodes() {
+		// Set color to (0, 1, 0) = green
+		changeColor(1.0f, 0.0f, 0.0f);
+
+		vec2 vertices[100];
+
+		for (int j = 0; j < 50; j++) {
+			for (int i = 0; i < 100; i++) {
+				float fi = i * 2 * M_PI / 100;
+				vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
+				float z = sqrt(1 + vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y);
+				vertices[i] = vertices[i] / z;
+			}
+
+			glBindVertexArray(vaoNode);  // Draw call
+			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+				sizeof(vec2) * 100,  // # bytes
+				vertices,	      	// address
+				GL_STATIC_DRAW);	// we do not change later
+
+			glEnableVertexAttribArray(0);  // AttribArray 0
+			glVertexAttribPointer(0,       // vbo -> AttribArray 0
+				2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
+				0, NULL); 		     // stride, offset: tightly packed
+			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 100 /*# Elements*/);
+		}
+	}
+	
+	void drawEdges() {
+		// Set color to (1, 1, 0) = yellow
+		changeColor(1.0f, 1.0f, 0.0f);
+
+		glBindVertexArray(vaoEdge);  // Draw call
+		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
+			sizeof(edges),  // # bytes
+			edges,	      	// address
+			GL_STATIC_DRAW);	// we do not change later
+
+		glEnableVertexAttribArray(0);  // AttribArray 0
+		glVertexAttribPointer(0,       // vbo -> AttribArray 0
+			2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
+			0, NULL); 		     // stride, offset: tightly packed
+		glDrawArrays(GL_LINES, 0, 61);
+	}
+
+	void changeColor(float r, float g, float b) {
+		int location = glGetUniformLocation(gpuProgram.getId(), "color");
+		glUniform3f(location, r, g, b); // 3 floats
+
+		float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix, 
+								  0, 1, 0, 0,    // row-major!
+								  0, 0, 1, 0,
+								  0, 0, 0, 1 };
+
+		location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
+		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
+	}
+};
+
+class TexturedQuad {
+	unsigned int vaoTexture, vboTexture[2];
+	vec2 vertices[4], uvs[4];
+	Texture texture;
+public:
+	TexturedQuad() {
+		vertices[0] = vec2(-1, -1); uvs[0] = vec2(0, 0);
+		vertices[1] = vec2(1, -1);  uvs[1] = vec2(1, 0);
+		vertices[2] = vec2(1, 1);   uvs[2] = vec2(1, 1);
+		vertices[3] = vec2(-1, 1);  uvs[3] = vec2(0, 1);
+
+		glGenVertexArrays(1, &vaoTexture);	// create 1 vertex array object
+		glBindVertexArray(vaoTexture);		// make it active
+
+		glGenBuffers(2, vboTexture);	// Generate 1 vertex buffer objects
+
+		// vertex coordinates: vbo[0] -> Attrib Array 0 -> vertexPosition of the vertex shader
+		glBindBuffer(GL_ARRAY_BUFFER, vboTexture[0]); // make it active, it is an array
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed
+
+		// vertex coordinates: vbo[1] -> Attrib Array 1 -> vertexUV of the vertex shader
+		glBindBuffer(GL_ARRAY_BUFFER, vboTexture[1]); // make it active, it is an array
+		glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed		
+	}
+
+	/*void MoveVertex(float cX, float cY) {
+		vec4 wCursor4 = vec4(cX, cY, 0, 1) * camera.Pinv() * camera.Vinv();
+		vec2 wCursor(wCursor4.x, wCursor4.y);
+
+		int closestVertex = 0;
+		float distMin = length(vertices[0] - wCursor);
+		for (int i = 1; i < 4; i++) {
+			float dist = length(vertices[i] - wCursor);
+			if (dist < distMin) {
+				distMin = dist;
+				closestVertex = i;
+			}
+		}
+		vertices[closestVertex] = wCursor;
+
+		// copy data to the GPU
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);	   // copy to that part of the memory which is modified 
+	}*/
+
+	void Draw() {
+		mat4 MVPTransform = { 1, 0, 0, 0,    // MVP matrix, 
+							  0, 1, 0, 0,    // row-major!
+							  0, 0, 1, 0,
+							  0, 0, 0, 1 };
+		gpuProgram.setUniform(MVPTransform, "MVP");
+		
+		glBindVertexArray(vaoTexture);	// make the vao and its vbos active playing the role of the data source
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);	// draw two triangles forming a quad
+	}
 };
 
 vec2 oldMousePosition;
 vec2 mousePosition;
 
-Graph graph;
+Graph* graph;
+TexturedQuad* quad;
 
 void changeColor(float r, float g, float b) {
 	int location = glGetUniformLocation(gpuProgram.getId(), "color");
@@ -88,97 +309,6 @@ void changeColor(float r, float g, float b) {
 
 	location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
 	glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
-}
-
-void generateGraph() {
-	
-	// generating graph with x, y, z coordinates
-	for (int i = 0; i < 50; i++) {
-		float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
-		float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
-		graph.nodes3D[i].x = randomX;
-		graph.nodes3D[i].y = randomY;
-		graph.nodes3D[i].z = sqrt(graph.nodes3D[i].x * graph.nodes3D[i].x + graph.nodes3D[i].y * graph.nodes3D[i].y + 1);
-	}
-
-	// making a 2D graph from the hiperbolic one
-	for (int i = 0; i < 50; i++) {
-		graph.nodes2D[i].x = graph.nodes3D[i].x / graph.nodes3D[i].z;
-		graph.nodes2D[i].y = graph.nodes3D[i].y / graph.nodes3D[i].z;
-	}
-
-
-	int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
-	while (true) {
-		int i = rand() % 51;			// a random point of the matrix
-		int j = rand() % 51;			// another random point of the matrix
-
-		if (i != j && graph.neighbourMatrix[i][j] == 0) {
-			graph.neighbourMatrix[i][j] = 1;
-			remainingEdges--;
-			if (remainingEdges == 0)
-				break;
-		}
-	}
-
-	int index = 0;
-	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
-		for (int j = 0; j < 50; j++) {
-			if (graph.neighbourMatrix[i][j] == 1) {
-				graph.edges[index++] = graph.nodes2D[i];
-				graph.edges[index++] = graph.nodes2D[j];
-			}
-		}
-	}
-}
-
-void updateNodes() {
-	for (int i = 0; i < 50; i++) {
-		graph.nodes2D[i].x = graph.nodes3D[i].x / graph.nodes3D[i].z;
-		graph.nodes2D[i].y = graph.nodes3D[i].y / graph.nodes3D[i].z;
-	}
-}
-
-void updateEdges() {
-	int index = 0;
-	for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
-		for (int j = 0; j < 50; j++) {
-			if (graph.neighbourMatrix[i][j] == 1) {
-				graph.edges[index++] = graph.nodes2D[i];
-				graph.edges[index++] = graph.nodes2D[j];
-			}
-		}
-	}
-}
-
-void updateGraph() {
-	updateNodes();
-	updateEdges();
-}
-
-void drawCircle() {
-	
-	vec2 vertices[100];
-	for (int j = 0; j < 50; j++) {
-		for (int i = 0; i < 100; i++) {
-			float fi = i * 2 * M_PI / 100;
-			vertices[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(graph.nodes3D[j].x, graph.nodes3D[j].y));
-			float z = sqrt(1 + vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y);
-			vertices[i] = vertices[i] / z;
-		}
-
-		glBindVertexArray(vaoNode);  // Draw call
-		glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-			sizeof(vec2) * 100,  // # bytes
-			vertices,	      	// address
-			GL_STATIC_DRAW);	// we do not change later
-
-		glEnableVertexAttribArray(0);  // AttribArray 0
-		glVertexAttribPointer(0,       // vbo -> AttribArray 0
-			2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
-			0, NULL); 		     // stride, offset: tightly packed
-		glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 100 /*# Elements*/);
-	}
 }
 
 float lorentz(vec3 p1, vec3 p2) {
@@ -208,9 +338,9 @@ void shift() {
 	vec3 n;
 	for (int i = 0; i < 50; i++) {
 
-		n.x = graph.nodes3D[i].x;
-		n.y = graph.nodes3D[i].y;
-		n.z = graph.nodes3D[i].z;
+		n.x = graph->nodes3D[i].x;
+		n.y = graph->nodes3D[i].y;
+		n.z = graph->nodes3D[i].z;
 
 		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 		
@@ -232,36 +362,10 @@ void shift() {
 		vec3 V2 = (m2 - (n1 * cosh(distnm2))) / sinh(distnm2);
 		vec3 n2 = (n1 * cosh(distnm2 * 2)) + (V2 * sinh(distnm2 * 2));
 
-		graph.nodes3D[i].x = n2.x;
-		graph.nodes3D[i].y = n2.y;
-		graph.nodes3D[i].z = n2.z;
+		graph->nodes3D[i].x = n2.x;
+		graph->nodes3D[i].y = n2.y;
+		graph->nodes3D[i].z = n2.z;
 	}
-
-}
-
-void drawGraph() {
-
-	updateGraph();
-
-	// Set color to (0, 1, 0) = green
-	changeColor(1.0f, 0.0f, 0.0f);
-
-	drawCircle();
-	
-	// Set color to (1, 1, 0) = yellow
-	changeColor(1.0f, 1.0f, 0.0f);	
-
-	glBindVertexArray(vaoEdge);  // Draw call
-	glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-		sizeof(graph.edges),  // # bytes
-		graph.edges,	      	// address
-		GL_STATIC_DRAW);	// we do not change later
-
-	glEnableVertexAttribArray(0);  // AttribArray 0
-	glVertexAttribPointer(0,       // vbo -> AttribArray 0
-		2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
-		0, NULL); 		     // stride, offset: tightly packed
-	glDrawArrays(GL_LINES, 0, 61);
 
 }
 
@@ -290,17 +394,20 @@ void onInitialization() {
 	glGenBuffers(1, &vboEdge);	// Generate 1 buffer
 	glBindBuffer(GL_ARRAY_BUFFER, vboEdge);
 	
-	generateGraph();
-
+	
 	// create program for the GPU
 	gpuProgram.create(vertexSource, fragmentSource, "outColor");
+	gpuProgram.create(vertexSource, fragmentSource, "fragmentColor");
+
+	graph = new Graph();
 }
 
 // Window has become invalid: Redraw
 void onDisplay() {
 	glClearColor(0, 0, 0, 0);     // background color
 	glClear(GL_COLOR_BUFFER_BIT); // clear frame buffer
-	drawGraph();
+	graph->draw();
+	//quad->Draw();
 	glutSwapBuffers(); // exchange buffers for double buffering 
 }
 
