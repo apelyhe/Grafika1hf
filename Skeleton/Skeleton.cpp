@@ -104,26 +104,11 @@ public:
 private:
 	void generateGraph() {
 
-		// generating graph with x, y, z coordinates
-		for (int i = 0; i < 50; i++) {
-			float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
-			float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
-			nodes3D[i].x = randomX;
-			nodes3D[i].y = randomY;
-			nodes3D[i].z = sqrt(nodes3D[i].x * nodes3D[i].x + nodes3D[i].y * nodes3D[i].y + 1.0f);
-		}
-
-		// making a 2D graph from the hiperbolic one
-		for (int i = 0; i < 50; i++) {
-			nodes2D[i].x = nodes3D[i].x / nodes3D[i].z;
-			nodes2D[i].y = nodes3D[i].y / nodes3D[i].z;
-		}
-
-
 		int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
+		// generating neighbour matrix
 		while (true) {
-			int i = rand() % 51;			// a random point of the matrix
-			int j = rand() % 51;			// another random point of the matrix
+			int i = rand() % 50;			// a random point of the matrix
+			int j = rand() % 50;			// another random point of the matrix
 
 			if (i != j && neighbourMatrix[i][j] == 0) {
 				neighbourMatrix[i][j] = 1;
@@ -133,15 +118,75 @@ private:
 			}
 		}
 
-		int index = 0;
-		for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
-			for (int j = 0; j < 50; j++) {
-				if (neighbourMatrix[i][j] == 1) {
-					edges[index++] = nodes2D[i];
-					edges[index++] = nodes2D[j];
+		// these variables are temporary beacuse the loop will run 50 times 
+		// and from these graphs, the the one which crossing number is the lowest
+		// will be selected
+
+		vec2 nodes2DTemp[50];		
+		vec3 nodes3DTemp[50];
+		vec2 edgesTemp[61 * 2];		
+
+		// the variable which contains the crossing number 
+		int intersectPoints = 0;
+
+		// the best graph will be selected from 50 
+		for (int tries = 0; tries < 50; tries++) {
+
+			// generating graph with x, y, z coordinates
+			for (int i = 0; i < 50; i++) {
+				float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
+				float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
+				nodes3DTemp[i].x = randomX;
+				nodes3DTemp[i].y = randomY;
+				nodes3DTemp[i].z = (float)sqrt(nodes3DTemp[i].x * nodes3DTemp[i].x + nodes3DTemp[i].y * nodes3DTemp[i].y + 1.0f);
+			}
+
+			// making a 2D graph from the hiperbolic one
+			for (int i = 0; i < 50; i++) {
+				nodes2DTemp[i].x = nodes3DTemp[i].x / nodes3DTemp[i].z;
+				nodes2DTemp[i].y = nodes3DTemp[i].y / nodes3DTemp[i].z;
+			}
+
+			int index = 0;
+			//adding the edges to the edges array according to the neighbour matrix
+			for (int i = 0; i < 50; i++) {				
+				for (int j = 0; j < 50; j++) {
+					if (neighbourMatrix[i][j] == 1) {
+						edgesTemp[index++] = nodes2DTemp[i];
+						edgesTemp[index++] = nodes2DTemp[j];
+					}
 				}
 			}
+
+			int temp = 0;
+			// checking every edges whether they have a common point or not
+			// if we compare one edge with itself, it the intersectCheck() will return with false
+			for (int j = 0; j < 122; j+=2) {
+				for (int i = 0; i < 122; i+=2) {
+					bool intersect = intersectCheck(edgesTemp[j], edgesTemp[j + 1], edgesTemp[i], edgesTemp[i + 1]);
+					if (intersect) {
+						temp++;
+					}
+				}
+			}
+			// if it's the first generated graph (beacuse the intersectPoints is initialized as 0)
+			// or the generated graph's crossing number is less then the previous one, 
+			// then change the old graph for the new one
+			if (intersectPoints == 0 || temp < intersectPoints) {
+				for (int i = 0; i < 50; i++) {
+					nodes2D[i] = nodes2DTemp[i];
+					nodes3D[i] = nodes3DTemp[i];
+				}
+				for (int i = 0; i < 122; i++) {
+					edges[i] = edgesTemp[i];
+				}
+				//printf("%i <--- régi %i <----- új \n", intersectPoints, temp);
+				intersectPoints = temp;
+			}
 		}
+		
+
+		
 	}
 
 	void generateTextures() {
@@ -273,11 +318,10 @@ private:
 
 	//source: https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
 	bool intersectCheck(vec2 edge1Start, vec2 edge1End, vec2 edge2Start, vec2 edge2End) {		
-		vec2 edge1[2] = { edge1Start, edge1End };
-		vec2 edge2[2] = { edge2Start, edge2End };
 
-		if (edge1[0].x == edge2[0].x && edge1[0].y == edge2[0].y
-			&& edge1[1].x == edge2[1].x && edge1[1].y == edge2[1].y) {
+		//if we want to compare the same two edges, return false
+		if (edge1Start.x == edge2Start.x && edge1Start.y == edge2Start.y
+			&& edge1End.x == edge2End.x && edge1End.y == edge2End.y) {
 			return false;
 		}
 
@@ -295,18 +339,18 @@ private:
 		// the formulas are the following:
 		// f1(x) = A1*x + b1 = y
 		// f2(x) = A2*x + b2 = y
-		if ((edge1[0].x - edge1[1].x) == 0 || (edge2[0].x - edge2[1].x) == 0) {
+		if ((edge1Start.x - edge1End.x) == 0 || (edge2Start.x - edge2End.x) == 0) {
 			return false;
 		}
 
 		// gradient of edge1
-		float A1 = (edge1[0].y - edge1[1].y) / (edge1[0].x - edge1[1].x);
+		float A1 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
 		// gradient of edge2
-		float A2 = (edge2[0].y - edge2[1].y) / (edge2[0].x - edge2[1].x);
+		float A2 = (edge2Start.y - edge2End.y) / (edge2Start.x - edge2End.x);
 
 		// one random point of the line is required (now it is the start point in both cases):
-		float b1 = (edge1[0].y - A1 * edge1[0].x);
-		float b2 = (edge2[0].y - A2 * edge2[0].x);
+		float b1 = (edge1Start.y - A1 * edge1Start.x);
+		float b2 = (edge2Start.y - A2 * edge2Start.x);
 
 		// if they are parallel (A1 = A2), they can't intersect
 		if (A1 == A2)
@@ -348,7 +392,7 @@ void shift() {
 	//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
 	float distOQ = (float)acosh(-lorentz(Q, O));
 	
-	if (distOQ == 0.0f) {		// to avoid dividing by zero
+	if (distOQ == 0) {		// to avoid dividing by zero
 		return;
 	}
 
@@ -369,7 +413,7 @@ void shift() {
 		
 		float distnm1 = (float)acosh(-lorentz(m1, n));
 
-		if (distnm1 == 0.0f) {		// to avoid dividing by zero
+		if (distnm1 == 0) {		// to avoid dividing by zero
 			return;
 		}
 
@@ -378,7 +422,7 @@ void shift() {
 
 		float distnm2 = (float)acosh(-lorentz(m2, n1));
 
-		if (distnm2 == 0.0f) {		// to avoid dividing by zero
+		if (distnm2 == 0) {		// to avoid dividing by zero
 			return;
 		}
 
