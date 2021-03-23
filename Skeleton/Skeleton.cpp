@@ -325,14 +325,14 @@ private:
 			return false;
 		}
 
-		float maxXedge1 = max(edge1Start.x, edge1End.x);		float minXedge1 = min(edge1Start.x, edge1End.x);
-		float maxXedge2 = max(edge2Start.x, edge2End.x);		float minXedge2 = min(edge2Start.x, edge2End.x);
+		float maxXedge1 = maximum(edge1Start.x, edge1End.x);		float minXedge1 = minimum(edge1Start.x, edge1End.x);
+		float maxXedge2 = maximum(edge2Start.x, edge2End.x);		float minXedge2 = minimum(edge2Start.x, edge2End.x);
 
 		// two line can't intersect if they have no common points on the x axis.
 		// the maximum of the minimums of the two points x coordinates has to be smaller
 		// than the mimimum of the maxiumums of the two points!
 		// otherwise there is no way for intersection
-		if (max(minXedge1, minXedge2) > min(maxXedge1, maxXedge2)) {
+		if (maximum(minXedge1, minXedge2) > minimum(maxXedge1, maxXedge2)) {
 			return false;
 		}
 
@@ -361,18 +361,28 @@ private:
 		// yP = A2 * xP + b2
 		// --> A1 * xP + b1 = A2 * xP + b2
 		// --> xP = (b2 - b1) / (A1 - A2)
-		if (A1 - A2 == 0) {
+		if (A1 - A2 == 0) {				// to avoid dividing by zero
 			return false;
 		}
 		float xP = (b2 - b1) / (A1 - A2);
 
-		if ((xP < max(minXedge1, minXedge2)) || (xP > min(maxXedge1, maxXedge2))) {
+		if ((xP < maximum(minXedge1, minXedge2)) || (xP > minimum(maxXedge1, maxXedge2))) {
 			return false;
 		}
 		else {
 			return true;
 		}
 
+	}
+
+	// I can't add new library, thus I created a minimum 
+	// and a maximum function, which are similar to std::min and std::max
+	float maximum(float a, float b) {
+		return (a < b) ? b : a;
+	}
+
+	float minimum(float a, float b) {
+		return (a > b) ? b : a;
 	}
 };
 
