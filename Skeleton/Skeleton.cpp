@@ -31,7 +31,7 @@
 // Tudomasul veszem, hogy a forrasmegjeloles kotelmenek megsertese eseten a hazifeladatra adhato pontokat
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
-#include "framework.h";
+#include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
 const char * const vertexSource = R"(
@@ -78,13 +78,15 @@ GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoNode;	   // virtual world on the GPU
 unsigned int vaoEdge;	   // virtual world on the GPU
 unsigned int vaoTexture;
+vec2 oldMousePosition;
+vec2 mousePosition;
 
 class Graph {
 public:
 
 	vec2 nodes2D[50];		// 50 points with x and y coordinates
 	vec3 nodes3D[50];
-	int neighbourMatrix[50][50] = { 0 };
+	int neighbourMatrix[50][50] = { { 0 } };
 	vec2 edges[61 * 2];		// 5% fullness means 61 edges, and each one has 2 endpoints
 	Texture* textures[50];
 
@@ -99,6 +101,7 @@ public:
 		drawNodes();
 	}
 
+private:
 	void generateGraph() {
 
 		// generating graph with x, y, z coordinates
@@ -194,9 +197,9 @@ public:
 
 		for (int j = 0; j < 50; j++) {
 			for (int i = 0; i < 100; i++) {
-				float fi = i * 2 * M_PI / 100;
+				float fi = (float)(i * 2 * M_PI) / 100;
 				circlePoints[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
-				float z = sqrt(1 + circlePoints[i].x * circlePoints[i].x + circlePoints[i].y * circlePoints[i].y);
+				float z = (float)sqrt(1 + circlePoints[i].x * circlePoints[i].x + circlePoints[i].y * circlePoints[i].y);
 				circlePoints[i] = circlePoints[i] / z;
 			}
 
@@ -267,11 +270,67 @@ public:
 		location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
 		glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 	}
+
+	//source: https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
+	bool intersectCheck(vec2 edge1Start, vec2 edge1End, vec2 edge2Start, vec2 edge2End) {		
+		vec2 edge1[2] = { edge1Start, edge1End };
+		vec2 edge2[2] = { edge2Start, edge2End };
+
+		if (edge1[0].x == edge2[0].x && edge1[0].y == edge2[0].y
+			&& edge1[1].x == edge2[1].x && edge1[1].y == edge2[1].y) {
+			return false;
+		}
+
+		float maxXedge1 = max(edge1Start.x, edge1End.x);		float minXedge1 = min(edge1Start.x, edge1End.x);
+		float maxXedge2 = max(edge2Start.x, edge2End.x);		float minXedge2 = min(edge2Start.x, edge2End.x);
+
+		// two line can't intersect if they have no common points on the x axis.
+		// the maximum of the minimums of the two points x coordinates has to be smaller
+		// than the mimimum of the maxiumums of the two points!
+		// otherwise there is no way for intersection
+		if (max(minXedge1, minXedge2) > min(maxXedge1, maxXedge2)) {
+			return false;
+		}
+
+		// the formulas are the following:
+		// f1(x) = A1*x + b1 = y
+		// f2(x) = A2*x + b2 = y
+		if ((edge1[0].x - edge1[1].x) == 0 || (edge2[0].x - edge2[1].x) == 0) {
+			return false;
+		}
+
+		// gradient of edge1
+		float A1 = (edge1[0].y - edge1[1].y) / (edge1[0].x - edge1[1].x);
+		// gradient of edge2
+		float A2 = (edge2[0].y - edge2[1].y) / (edge2[0].x - edge2[1].x);
+
+		// one random point of the line is required (now it is the start point in both cases):
+		float b1 = (edge1[0].y - A1 * edge1[0].x);
+		float b2 = (edge2[0].y - A2 * edge2[0].x);
+
+		// if they are parallel (A1 = A2), they can't intersect
+		if (A1 == A2)
+			return false;
+
+		// if they intersect, they intersect in P1 point (with xP, yP coordinates), which means:
+		// yP = A1 * xP + b1
+		// yP = A2 * xP + b2
+		// --> A1 * xP + b1 = A2 * xP + b2
+		// --> xP = (b2 - b1) / (A1 - A2)
+		if (A1 - A2 == 0) {
+			return false;
+		}
+		float xP = (b2 - b1) / (A1 - A2);
+
+		if ((xP < max(minXedge1, minXedge2)) || (xP > min(maxXedge1, maxXedge2))) {
+			return false;
+		}
+		else {
+			return true;
+		}
+
+	}
 };
-
-
-vec2 oldMousePosition;
-vec2 mousePosition;
 
 Graph* graph;
 
@@ -282,22 +341,22 @@ float lorentz(vec3 p1, vec3 p2) {
 void shift() {
 	vec3 O(0.0f, 0.0f, 1.0f);
 	vec3 Q;
-	Q.x = mousePosition.x / sqrt(1 - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-	Q.y = mousePosition.y / sqrt(1 - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-	Q.z = 1 / sqrt(1 - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+	Q.x = mousePosition.x / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+	Q.y = mousePosition.y / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+	Q.z = 1.0f / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
 
 	//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
-	float distOQ = acosh(-lorentz(Q, O));
+	float distOQ = (float)acosh(-lorentz(Q, O));
 	
 	if (distOQ == 0.0f) {		// to avoid dividing by zero
 		return;
 	}
 
-	vec3 V = (Q - (O * cosh(distOQ))) / sinh(distOQ);
+	vec3 V = (Q - (O * (float)cosh(distOQ))) / (float)sinh(distOQ);
 
-	vec3 m1 = (O * cosh(distOQ / 4)) + (V * sinh(distOQ / 4));
+	vec3 m1 = (O * (float)cosh(distOQ / 4)) + (V * (float)sinh(distOQ / 4));
 
-	vec3 m2 = (O * cosh((3 * distOQ) / 4)) + (V * sinh((3 * distOQ) / 4));
+	vec3 m2 = (O * (float)cosh((3 * distOQ) / 4)) + (V * (float)sinh((3 * distOQ) / 4));
 
 	vec3 n;
 	for (int i = 0; i < 50; i++) {
@@ -308,23 +367,23 @@ void shift() {
 
 		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 		
-		float distnm1 = acosh(-lorentz(m1, n));
+		float distnm1 = (float)acosh(-lorentz(m1, n));
 
 		if (distnm1 == 0.0f) {		// to avoid dividing by zero
 			return;
 		}
 
-		vec3 V1 = (m1 - (n * cosh(distnm1))) / sinh(distnm1);
-		vec3 n1 = (n * cosh(distnm1 * 2)) + (V1 * sinh(distnm1 * 2));
+		vec3 V1 = (m1 - (n * (float)cosh(distnm1))) / (float)sinh(distnm1);
+		vec3 n1 = (n * (float)cosh(distnm1 * 2)) + (V1 * (float)sinh(distnm1 * 2));
 
-		float distnm2 = acosh(-lorentz(m2, n1));
+		float distnm2 = (float)acosh(-lorentz(m2, n1));
 
 		if (distnm2 == 0.0f) {		// to avoid dividing by zero
 			return;
 		}
 
-		vec3 V2 = (m2 - (n1 * cosh(distnm2))) / sinh(distnm2);
-		vec3 n2 = (n1 * cosh(distnm2 * 2)) + (V2 * sinh(distnm2 * 2));
+		vec3 V2 = (m2 - (n1 * (float)cosh(distnm2))) / (float)sinh(distnm2);
+		vec3 n2 = (n1 * (float)cosh(distnm2 * 2)) + (V2 * (float)sinh(distnm2 * 2));
 
 		graph->nodes3D[i].x = n2.x;
 		graph->nodes3D[i].y = n2.y;
