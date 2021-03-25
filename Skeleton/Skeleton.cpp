@@ -82,7 +82,6 @@ unsigned int vaoEdge;	   // virtual world on the GPU
 vec2 oldMousePosition;
 vec2 mousePosition;
 
-
 class Graph {
 public:
 
@@ -104,7 +103,8 @@ public:
 	}
 
 	void forceDirectedAlgorithm() {
-		const float optimalDistance = 0.3f;
+		
+		const float optimalDistance = 0.22f;
 		
 		for (int i = 0; i < 50; i++) {
 			vec2 force(0, 0);
@@ -122,67 +122,18 @@ public:
 					force = ((force + forceBetweenNotNeighbours(nodes2D[j], nodes2D[i], p, distance)));
 				}
 			}
-			force = force + (-nodes2D[i] *0.7 );	// the force which keep the graph centered
-			force = force * 0.02f;
+			force = force + (-nodes2D[i] * 1.3);	// the force which keep the graph centered
+			force = force * 0.01f;
 			shiftOneNode(i, force);
 		}
-
-		//updateEdges();
+		updateGraph();
 		glutPostRedisplay();
 	}
 
 	void shift() {
-		vec3 O(0.0f, 0.0f, 1.0f);
-		vec3 Q;
-		Q.x = mousePosition.x / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-		Q.y = mousePosition.y / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-		Q.z = 1.0f / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-
-		//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
-		float distOQ = acoshf(-lorentz(Q, O));
-
-		if (distOQ == 0.0f) {		// to avoid dividing by zero
-			return;
+		for (int nodes = 0; nodes < 50; nodes++) {
+			shiftOneNode(nodes, mousePosition);
 		}
-
-		vec3 V = (Q - (O * coshf(distOQ))) / sinhf(distOQ);
-
-		vec3 m1 = (O * coshf(distOQ / 4)) + (V * sinhf(distOQ / 4));
-
-		vec3 m2 = (O * coshf((3 * distOQ) / 4)) + (V * sinhf((3 * distOQ) / 4));
-
-		vec3 n;
-		for (int i = 0; i < 50; i++) {
-
-			n.x = nodes3D[i].x;
-			n.y = nodes3D[i].y;
-			n.z = nodes3D[i].z;
-
-			//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
-
-			float distnm1 = acoshf(-lorentz(m1, n));
-
-			if (distnm1 == 0.0f) {		// to avoid dividing by zero
-				return;
-			}
-
-			vec3 V1 = (m1 - (n * coshf(distnm1))) / sinhf(distnm1);
-			vec3 n1 = (n * coshf(distnm1 * 2)) + (V1 * sinhf(distnm1 * 2));
-
-			float distnm2 = acoshf(-lorentz(m2, n1));
-
-			if (distnm2 == 0.0f) {		// to avoid dividing by zero
-				return;
-			}
-
-			vec3 V2 = (m2 - (n1 * coshf(distnm2))) / sinhf(distnm2);
-			vec3 n2 = (n1 * coshf(distnm2 * 2)) + (V2 * sinhf(distnm2 * 2));
-
-			nodes3D[i].x = n2.x;
-			nodes3D[i].y = n2.y;
-			nodes3D[i].z = n2.z;
-		}
-
 	}
 
 private:
@@ -493,17 +444,17 @@ private:
 		return (p1 - p2) * (-1 / (p * p));
 	}
 
-	void shiftOneNode(int index, vec2 force) {
+	void shiftOneNode(int index, vec2 vector) {
 		vec3 O(0.0f, 0.0f, 1.0f);
 		vec3 Q;
-		Q.x = force.x / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
-		Q.y = force.y / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
-		Q.z = 1.0f / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
+		Q.x = vector.x / sqrtf(1.0f - (vector.x * vector.x) - (vector.y * vector.y));
+		Q.y = vector.y / sqrtf(1.0f - (vector.x * vector.x) - (vector.y * vector.y));
+		Q.z = 1.0f / sqrtf(1.0f - (vector.x * vector.x) - (vector.y * vector.y));
 
 		//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
 		float distOQ = acoshf(-lorentz(Q, O));
 
-		if (distOQ == 0.0f) {		// to avoid dividing by zero
+		if (distOQ != distOQ) {		// this will return true only if typeof(distQO) is NaN
 			return;
 		}
 
@@ -515,35 +466,37 @@ private:
 
 		vec3 n;
 
-			n.x = nodes3D[index].x;
-			n.y = nodes3D[index].y;
-			n.z = nodes3D[index].z;
+		n.x = nodes3D[index].x;
+		n.y = nodes3D[index].y;
+		n.z = nodes3D[index].z;
 
-			//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 
-			float distnm1 = acoshf(-lorentz(m1, n));
+		float distnm1 = acoshf(-lorentz(m1, n));
 
-			if (distnm1 == 0.0f) {		// to avoid dividing by zero
-				return;
-			}
-
-			vec3 V1 = (m1 - (n * coshf(distnm1))) / sinhf(distnm1);
-			vec3 n1 = (n * coshf(distnm1 * 2)) + (V1 * sinhf(distnm1 * 2));
-
-			float distnm2 = acoshf(-lorentz(m2, n1));
-
-			if (distnm2 == 0.0f) {		// to avoid dividing by zero
-				return;
-			}
-
-			vec3 V2 = (m2 - (n1 * coshf(distnm2))) / sinhf(distnm2);
-			vec3 n2 = (n1 * coshf(distnm2 * 2)) + (V2 * sinhf(distnm2 * 2));
-
-			nodes3D[index].x = n2.x;
-			nodes3D[index].y = n2.y;
-			nodes3D[index].z = n2.z;
+		if (distnm1 != distnm1) {		// this will return true only if typeof(distnm1) is NaN
+			return;
 		}
 
+		vec3 V1 = (m1 - (n * coshf(distnm1))) / sinhf(distnm1);
+		vec3 n1 = (n * coshf(distnm1 * 2)) + (V1 * sinhf(distnm1 * 2));
+
+		float distnm2 = acoshf(-lorentz(m2, n1));
+
+		if (distnm2 != distnm2) {		// this will return true only if typeof(distnm2) is NaN
+			return;
+		}
+
+		vec3 V2 = (m2 - (n1 * coshf(distnm2))) / sinhf(distnm2);
+		vec3 n2 = (n1 * coshf(distnm2 * 2)) + (V2 * sinhf(distnm2 * 2));
+
+		nodes3D[index].x = n2.x;
+		nodes3D[index].y = n2.y;
+		nodes3D[index].z = n2.z;
+
+
+		//updateGraph();
+	}
 	
 };
 
@@ -588,7 +541,7 @@ void onDisplay() {
 }
 
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == ' ' ) {
+	if (key == 32 ) {
 		callFunction = true;
 	}
 }
