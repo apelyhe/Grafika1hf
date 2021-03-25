@@ -31,6 +31,7 @@
 // Tudomasul veszem, hogy a forrasmegjeloles kotelmenek megsertese eseten a hazifeladatra adhato pontokat
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
+
 #include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
@@ -77,9 +78,10 @@ const char* fragmentSource = R"(
 GPUProgram gpuProgram; // vertex and fragment shaders
 unsigned int vaoNode;	   // virtual world on the GPU
 unsigned int vaoEdge;	   // virtual world on the GPU
-unsigned int vaoTexture;
+
 vec2 oldMousePosition;
 vec2 mousePosition;
+
 
 class Graph {
 public:
@@ -97,8 +99,90 @@ public:
 
 	void draw() {
 		updateGraph();
-		drawEdges();
 		drawNodes();
+		drawEdges();
+	}
+
+	void forceDirectedAlgorithm() {
+		const float optimalDistance = 0.3f;
+		
+		for (int i = 0; i < 50; i++) {
+			vec2 force(0, 0);
+			for (int j = 0; j < 50; j++) {
+				if (i == j) {
+					continue;
+				}
+				float distance = distanceBetweenTwoPoints(nodes3D[i], nodes3D[j]);
+				float p = distance / optimalDistance;
+
+				if (neighbourMatrix[i][j] == 1 || neighbourMatrix[j][i] == 1) {
+					force = ((force + forceBetweenNeighbours(nodes2D[j], nodes2D[i], p, distance)));
+				}
+				else if (neighbourMatrix[i][j] == 0 && neighbourMatrix[j][i] == 0) {
+					force = ((force + forceBetweenNotNeighbours(nodes2D[j], nodes2D[i], p, distance)));
+				}
+			}
+			force = force + (-nodes2D[i] *0.7 );	// the force which keep the graph centered
+			force = force * 0.02f;
+			shiftOneNode(i, force);
+		}
+
+		//updateEdges();
+		glutPostRedisplay();
+	}
+
+	void shift() {
+		vec3 O(0.0f, 0.0f, 1.0f);
+		vec3 Q;
+		Q.x = mousePosition.x / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+		Q.y = mousePosition.y / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+		Q.z = 1.0f / sqrtf(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
+
+		//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
+		float distOQ = acoshf(-lorentz(Q, O));
+
+		if (distOQ == 0.0f) {		// to avoid dividing by zero
+			return;
+		}
+
+		vec3 V = (Q - (O * coshf(distOQ))) / sinhf(distOQ);
+
+		vec3 m1 = (O * coshf(distOQ / 4)) + (V * sinhf(distOQ / 4));
+
+		vec3 m2 = (O * coshf((3 * distOQ) / 4)) + (V * sinhf((3 * distOQ) / 4));
+
+		vec3 n;
+		for (int i = 0; i < 50; i++) {
+
+			n.x = nodes3D[i].x;
+			n.y = nodes3D[i].y;
+			n.z = nodes3D[i].z;
+
+			//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+
+			float distnm1 = acoshf(-lorentz(m1, n));
+
+			if (distnm1 == 0.0f) {		// to avoid dividing by zero
+				return;
+			}
+
+			vec3 V1 = (m1 - (n * coshf(distnm1))) / sinhf(distnm1);
+			vec3 n1 = (n * coshf(distnm1 * 2)) + (V1 * sinhf(distnm1 * 2));
+
+			float distnm2 = acoshf(-lorentz(m2, n1));
+
+			if (distnm2 == 0.0f) {		// to avoid dividing by zero
+				return;
+			}
+
+			vec3 V2 = (m2 - (n1 * coshf(distnm2))) / sinhf(distnm2);
+			vec3 n2 = (n1 * coshf(distnm2 * 2)) + (V2 * sinhf(distnm2 * 2));
+
+			nodes3D[i].x = n2.x;
+			nodes3D[i].y = n2.y;
+			nodes3D[i].z = n2.z;
+		}
+
 	}
 
 private:
@@ -107,16 +191,20 @@ private:
 		int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
 		// generating neighbour matrix
 		while (true) {
+			
 			int i = rand() % 50;			// a random point of the matrix
 			int j = rand() % 50;			// another random point of the matrix
 
-			if (i != j && neighbourMatrix[i][j] == 0) {
+			if (i != j && neighbourMatrix[i][j] == 0 && neighbourMatrix[j][i] == 0) {
+				//printf("%i i %i j\n", i, j);
 				neighbourMatrix[i][j] = 1;
 				remainingEdges--;
-				if (remainingEdges == 0)
-					break;
 			}
+
+			if (remainingEdges == 0) 
+				break;
 		}
+	
 
 		// these variables are temporary beacuse the loop will run 50 times 
 		// and from these graphs, the the one which crossing number is the lowest
@@ -129,8 +217,8 @@ private:
 		// the variable which contains the crossing number 
 		int intersectPoints = 0;
 
-		// the best graph will be selected from 50 
-		for (int tries = 0; tries < 50; tries++) {
+		// the best graph will be selected from 100 
+		for (int tries = 0; tries < 100; tries++) {
 
 			// generating graph with x, y, z coordinates
 			for (int i = 0; i < 50; i++) {
@@ -138,20 +226,22 @@ private:
 				float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
 				nodes3DTemp[i].x = randomX;
 				nodes3DTemp[i].y = randomY;
-				nodes3DTemp[i].z = (float)sqrt(nodes3DTemp[i].x * nodes3DTemp[i].x + nodes3DTemp[i].y * nodes3DTemp[i].y + 1.0f);
+				nodes3DTemp[i].z = sqrtf(nodes3DTemp[i].x * nodes3DTemp[i].x + nodes3DTemp[i].y * nodes3DTemp[i].y + 1.0f);
 			}
 
 			// making a 2D graph from the hiperbolic one
 			for (int i = 0; i < 50; i++) {
 				nodes2DTemp[i].x = nodes3DTemp[i].x / nodes3DTemp[i].z;
 				nodes2DTemp[i].y = nodes3DTemp[i].y / nodes3DTemp[i].z;
+				//printf("[%i.] %f x coordinate %f y coordinate\n", i, nodes2DTemp[i].x, nodes2DTemp[i].y);
 			}
 
 			int index = 0;
 			//adding the edges to the edges array according to the neighbour matrix
 			for (int i = 0; i < 50; i++) {				
 				for (int j = 0; j < 50; j++) {
-					if (neighbourMatrix[i][j] == 1) {
+					if (neighbourMatrix[i][j] == 1 ) {
+						//printf("%i", index);
 						edgesTemp[index++] = nodes2DTemp[i];
 						edgesTemp[index++] = nodes2DTemp[j];
 					}
@@ -176,16 +266,16 @@ private:
 				for (int i = 0; i < 50; i++) {
 					nodes2D[i] = nodes2DTemp[i];
 					nodes3D[i] = nodes3DTemp[i];
+					//printf("[%i.] %f x coordinate %f y coordinate\n", i, nodes2D[i].x, nodes2D[i].y);
 				}
-				for (int i = 0; i < 122; i++) {
+				for (int i = 0; i < 121; i+=2) {
 					edges[i] = edgesTemp[i];
+					//printf("%i %f:x %f:y   ---    %f:x %f:y\n", i, edgesTemp[i].x, edges[i].y, edgesTemp[i+1].x, edgesTemp[i+1].y);
 				}
 				//printf("%i <--- régi %i <----- új \n", intersectPoints, temp);
 				intersectPoints = temp;
 			}
 		}
-		
-
 		
 	}
 
@@ -216,9 +306,11 @@ private:
 
 	void updateEdges() {
 		int index = 0;
-		for (int i = 0; i < 50; i++) {				//adding the edges to the edges array according to the neighbour matrix
+		//adding the edges to the edges array according to the neighbour matrix
+		for (int i = 0; i < 50; i++) {
 			for (int j = 0; j < 50; j++) {
 				if (neighbourMatrix[i][j] == 1) {
+					//printf("%i", index);
 					edges[index++] = nodes2D[i];
 					edges[index++] = nodes2D[j];
 				}
@@ -227,8 +319,8 @@ private:
 	}
 
 	void updateGraph() {
-		updateEdges();
 		updateNodes();
+		updateEdges();
 	}
 
 	void drawNodes() {
@@ -244,20 +336,20 @@ private:
 			for (int i = 0; i < 100; i++) {
 				float fi = (float)(i * 2 * M_PI) / 100;
 				circlePoints[i] = vec2(vec2(cosf(fi) * 0.05f, sinf(fi) * 0.05f) + vec2(nodes3D[j].x, nodes3D[j].y));
-				float z = (float)sqrt(1 + circlePoints[i].x * circlePoints[i].x + circlePoints[i].y * circlePoints[i].y);
+				float z = (float)sqrtf(1 + circlePoints[i].x * circlePoints[i].x + circlePoints[i].y * circlePoints[i].y);
 				circlePoints[i] = circlePoints[i] / z;
 			}
 
-			vertices[0] = circlePoints[24];						
-			vertices[1] = circlePoints[49];			
-			vertices[2] = circlePoints[74];			
-			vertices[3] = circlePoints[99];			
+			vertices[0] = circlePoints[24];
+			vertices[1] = circlePoints[49];
+			vertices[2] = circlePoints[74];
+			vertices[3] = circlePoints[99];
 
 			gpuProgram.setUniform(0, "colorOrTexture");
 
 			glBindVertexArray(vaoNode);  // Draw call
 			glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
-				sizeof(vec2) * 100,  // # bytes
+				sizeof(circlePoints),  // # bytes
 				circlePoints,	      	// address
 				GL_STATIC_DRAW);	// we do not change later
 
@@ -266,7 +358,7 @@ private:
 				2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
 				0, NULL); 		     // stride, offset: tightly packed
 			glDrawArrays(GL_TRIANGLE_FAN, 0 /*startIdx*/, 100 /*# Elements*/);
-			
+
 			gpuProgram.setUniform((*textures[j]), "textureUnit");
 			gpuProgram.setUniform(1, "colorOrTexture");
 			glBufferData(GL_ARRAY_BUFFER,
@@ -285,7 +377,7 @@ private:
 
 		gpuProgram.setUniform(0, "colorOrTexture");
 	}
-	
+
 	void drawEdges() {
 		// Set color to (1, 1, 0) = yellow
 		changeColor(1.0f, 1.0f, 0.0f);
@@ -300,7 +392,7 @@ private:
 		glVertexAttribPointer(0,       // vbo -> AttribArray 0
 			2, GL_FLOAT, GL_FALSE, // two floats/attrib, not fixed-point
 			0, NULL); 		     // stride, offset: tightly packed
-		glDrawArrays(GL_LINES, 0, 61);
+		glDrawArrays(GL_LINES, 0, 122);
 	}
 
 	void changeColor(float r, float g, float b) {
@@ -317,7 +409,7 @@ private:
 	}
 
 	//source: https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
-	bool intersectCheck(vec2 edge1Start, vec2 edge1End, vec2 edge2Start, vec2 edge2End) {		
+	bool intersectCheck(vec2 edge1Start, vec2 edge1End, vec2 edge2Start, vec2 edge2End) {
 
 		//if we want to compare the same two edges, return false
 		if (edge1Start.x == edge2Start.x && edge1Start.y == edge2Start.y
@@ -339,32 +431,32 @@ private:
 		// the formulas are the following:
 		// f1(x) = A1*x + b1 = y
 		// f2(x) = A2*x + b2 = y
-		if ((edge1Start.x - edge1End.x) == 0 || (edge2Start.x - edge2End.x) == 0) {
-			return false;
-		}
+		float A1 = 0, A2 = 0;
 
 		// gradient of edge1
-		float A1 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
+		if ((edge1Start.x - edge1End.x) != 0) {
+			A1 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
+		}
+
 		// gradient of edge2
-		float A2 = (edge2Start.y - edge2End.y) / (edge2Start.x - edge2End.x);
+		if ((edge1Start.x - edge1End.x) != 0) {
+			A2 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
+		}
 
 		// one random point of the line is required (now it is the start point in both cases):
 		float b1 = (edge1Start.y - A1 * edge1Start.x);
 		float b2 = (edge2Start.y - A2 * edge2Start.x);
-
-		// if they are parallel (A1 = A2), they can't intersect
-		if (A1 == A2)
-			return false;
 
 		// if they intersect, they intersect in P1 point (with xP, yP coordinates), which means:
 		// yP = A1 * xP + b1
 		// yP = A2 * xP + b2
 		// --> A1 * xP + b1 = A2 * xP + b2
 		// --> xP = (b2 - b1) / (A1 - A2)
-		if (A1 - A2 == 0) {				// to avoid dividing by zero
-			return false;
+		float xP = 0.0f;
+		if (A1 - A2 != 0) {				// to avoid dividing by zero
+			float xP = (b2 - b1) / (A1 - A2);
 		}
-		float xP = (b2 - b1) / (A1 - A2);
+		
 
 		if ((xP < maximum(minXedge1, minXedge2)) || (xP > minimum(maxXedge1, maxXedge2))) {
 			return false;
@@ -384,78 +476,87 @@ private:
 	float minimum(float a, float b) {
 		return (a > b) ? b : a;
 	}
+
+	float lorentz(vec3 p1, vec3 p2) {
+		return p1.x * p2.x + p1.y * p2.y - p1.z * p2.z;
+	}
+
+	float distanceBetweenTwoPoints(vec3 p1, vec3 p2) {
+		return acosh(-lorentz(p1, p2));
+	}
+
+	vec2 forceBetweenNeighbours(vec2 p1, vec2 p2, float p, float distance) {
+		return (p1 - p2) * log(p);
+	}
+
+	vec2 forceBetweenNotNeighbours(vec2 p1, vec2 p2, float p, float distance) {
+		return (p1 - p2) * (-1 / (p * p));
+	}
+
+	void shiftOneNode(int index, vec2 force) {
+		vec3 O(0.0f, 0.0f, 1.0f);
+		vec3 Q;
+		Q.x = force.x / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
+		Q.y = force.y / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
+		Q.z = 1.0f / sqrtf(1.0f - (force.x * force.x) - (force.y * force.y));
+
+		//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
+		float distOQ = acoshf(-lorentz(Q, O));
+
+		if (distOQ == 0.0f) {		// to avoid dividing by zero
+			return;
+		}
+
+		vec3 V = (Q - (O * coshf(distOQ))) / sinhf(distOQ);
+
+		vec3 m1 = (O * coshf(distOQ / 4)) + (V * sinhf(distOQ / 4));
+
+		vec3 m2 = (O * coshf((3 * distOQ) / 4)) + (V * sinhf((3 * distOQ) / 4));
+
+		vec3 n;
+
+			n.x = nodes3D[index].x;
+			n.y = nodes3D[index].y;
+			n.z = nodes3D[index].z;
+
+			//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
+
+			float distnm1 = acoshf(-lorentz(m1, n));
+
+			if (distnm1 == 0.0f) {		// to avoid dividing by zero
+				return;
+			}
+
+			vec3 V1 = (m1 - (n * coshf(distnm1))) / sinhf(distnm1);
+			vec3 n1 = (n * coshf(distnm1 * 2)) + (V1 * sinhf(distnm1 * 2));
+
+			float distnm2 = acoshf(-lorentz(m2, n1));
+
+			if (distnm2 == 0.0f) {		// to avoid dividing by zero
+				return;
+			}
+
+			vec3 V2 = (m2 - (n1 * coshf(distnm2))) / sinhf(distnm2);
+			vec3 n2 = (n1 * coshf(distnm2 * 2)) + (V2 * sinhf(distnm2 * 2));
+
+			nodes3D[index].x = n2.x;
+			nodes3D[index].y = n2.y;
+			nodes3D[index].z = n2.z;
+		}
+
+	
 };
 
 Graph* graph;
+bool callFunction = false;
+int iter = 0;
 
-float lorentz(vec3 p1, vec3 p2) {
-	return p1.x * p2.x + p1.y * p2.y - p1.z * p2.z;
-}
-
-void shift() {
-	vec3 O(0.0f, 0.0f, 1.0f);
-	vec3 Q;
-	Q.x = mousePosition.x / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-	Q.y = mousePosition.y / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-	Q.z = 1.0f / (float)sqrt(1.0f - (mousePosition.x * mousePosition.x) - (mousePosition.y * mousePosition.y));
-
-	//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
-	float distOQ = (float)acosh(-lorentz(Q, O));
-	
-	if (distOQ == 0) {		// to avoid dividing by zero
-		return;
-	}
-
-	vec3 V = (Q - (O * (float)cosh(distOQ))) / (float)sinh(distOQ);
-
-	vec3 m1 = (O * (float)cosh(distOQ / 4)) + (V * (float)sinh(distOQ / 4));
-
-	vec3 m2 = (O * (float)cosh((3 * distOQ) / 4)) + (V * (float)sinh((3 * distOQ) / 4));
-
-	vec3 n;
-	for (int i = 0; i < 50; i++) {
-
-		n.x = graph->nodes3D[i].x;
-		n.y = graph->nodes3D[i].y;
-		n.z = graph->nodes3D[i].z;
-
-		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
-		
-		float distnm1 = (float)acosh(-lorentz(m1, n));
-
-		if (distnm1 == 0) {		// to avoid dividing by zero
-			return;
-		}
-
-		vec3 V1 = (m1 - (n * (float)cosh(distnm1))) / (float)sinh(distnm1);
-		vec3 n1 = (n * (float)cosh(distnm1 * 2)) + (V1 * (float)sinh(distnm1 * 2));
-
-		float distnm2 = (float)acosh(-lorentz(m2, n1));
-
-		if (distnm2 == 0) {		// to avoid dividing by zero
-			return;
-		}
-
-		vec3 V2 = (m2 - (n1 * (float)cosh(distnm2))) / (float)sinh(distnm2);
-		vec3 n2 = (n1 * (float)cosh(distnm2 * 2)) + (V2 * (float)sinh(distnm2 * 2));
-
-		graph->nodes3D[i].x = n2.x;
-		graph->nodes3D[i].y = n2.y;
-		graph->nodes3D[i].z = n2.z;
-	}
-
-}
-
-
-
-//							^^ helper functions ^^ 
-// <------------------------------------------------------------------------>
 
 // Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 	glPointSize(7.0);		//source: https://www.khronos.org/registry/OpenGL-Refpages/gl2.1/xhtml/glPointSize.xml
-	glLineWidth(0.25);
+	glLineWidth(2.0);
 
 	glGenVertexArrays(1, &vaoNode);	// get 1 vao id
 	glBindVertexArray(vaoNode);		// make it active
@@ -487,11 +588,14 @@ void onDisplay() {
 }
 
 void onKeyboard(unsigned char key, int pX, int pY) {
-	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	if (key == ' ' ) {
+		callFunction = true;
+	}
 }
 
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
+
 }
 
 // Move mouse with key pressed
@@ -499,7 +603,6 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	// Convert to normalized device space
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
-
 
 	if (cX * cX + cY * cY >= 1)
 		return;
@@ -512,7 +615,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	oldMousePosition.y = cY;
 	
 	//printf("\n%f : MOUSEDELTA.X     %f: MOUSEDELTA.Y\n", oldMousePosition.x, oldMousePosition.y);
-	shift();
+	graph->shift();
 	glutPostRedisplay();
 }
 
@@ -536,12 +639,24 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 		buttonStat = "released";
 		break;
 	}
+
 	glutPostRedisplay();
 }
+
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+
+	if (callFunction) {
+		iter++;
+		graph->forceDirectedAlgorithm();
+		if (iter == 1000) {
+			callFunction = false;
+			iter = 0;
+		}
+	}
+
 }
 
 
