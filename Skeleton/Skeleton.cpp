@@ -85,7 +85,7 @@ vec2 mousePosition;
 class Graph {
 public:
 
-	vec2 nodes2D[50];		// 50 points with x and y coordinates
+	vec2 nodes2D[50];		
 	vec3 nodes3D[50];
 	int neighbourMatrix[50][50] = { { 0 } };
 	vec2 edges[61 * 2];		// 5% fullness means 61 edges, and each one has 2 endpoints
@@ -122,7 +122,7 @@ public:
 					force = ((force + forceBetweenNotNeighbours(nodes2D[j], nodes2D[i], p, distance)));
 				}
 			}
-			force = force + (-nodes2D[i] * 1.3);	// the force which keep the graph centered
+			force = force + (-nodes2D[i] * 1.3);	
 			force = force * 0.01f;
 			shiftOneNode(i, force);
 		}
@@ -139,15 +139,14 @@ public:
 private:
 	void generateGraph() {
 
-		int remainingEdges = 61;			// first there will be 61 edges and after generating edges this will be decremented
-		// generating neighbour matrix
+		int remainingEdges = 61;			
+		
 		while (true) {
 			
-			int i = rand() % 50;			// a random point of the matrix
-			int j = rand() % 50;			// another random point of the matrix
+			int i = rand() % 50;			
+			int j = rand() % 50;			
 
 			if (i != j && neighbourMatrix[i][j] == 0 && neighbourMatrix[j][i] == 0) {
-				//printf("%i i %i j\n", i, j);
 				neighbourMatrix[i][j] = 1;
 				remainingEdges--;
 			}
@@ -157,42 +156,33 @@ private:
 		}
 	
 
-		// these variables are temporary beacuse the loop will run 50 times 
-		// and from these graphs, the the one which crossing number is the lowest
-		// will be selected
-
 		vec2 nodes2DTemp[50];		
 		vec3 nodes3DTemp[50];
 		vec2 edgesTemp[61 * 2];		
 
-		// the variable which contains the crossing number 
 		int intersectPoints = 0;
 
-		// the best graph will be selected from 100 
 		for (int tries = 0; tries < 100; tries++) {
 
-			// generating graph with x, y, z coordinates
+			
 			for (int i = 0; i < 50; i++) {
-				float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random x coordinate
-				float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		//random y coordinate
+				float randomX = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		
+				float randomY = ((float)rand() / RAND_MAX) * (1.000f - (-1.000f)) + (-1.000f);		
 				nodes3DTemp[i].x = randomX;
 				nodes3DTemp[i].y = randomY;
 				nodes3DTemp[i].z = sqrtf(nodes3DTemp[i].x * nodes3DTemp[i].x + nodes3DTemp[i].y * nodes3DTemp[i].y + 1.0f);
 			}
 
-			// making a 2D graph from the hiperbolic one
 			for (int i = 0; i < 50; i++) {
 				nodes2DTemp[i].x = nodes3DTemp[i].x / nodes3DTemp[i].z;
 				nodes2DTemp[i].y = nodes3DTemp[i].y / nodes3DTemp[i].z;
-				//printf("[%i.] %f x coordinate %f y coordinate\n", i, nodes2DTemp[i].x, nodes2DTemp[i].y);
 			}
 
 			int index = 0;
-			//adding the edges to the edges array according to the neighbour matrix
+			
 			for (int i = 0; i < 50; i++) {				
 				for (int j = 0; j < 50; j++) {
 					if (neighbourMatrix[i][j] == 1 ) {
-						//printf("%i", index);
 						edgesTemp[index++] = nodes2DTemp[i];
 						edgesTemp[index++] = nodes2DTemp[j];
 					}
@@ -200,8 +190,6 @@ private:
 			}
 
 			int temp = 0;
-			// checking every edges whether they have a common point or not
-			// if we compare one edge with itself, it the intersectCheck() will return with false
 			for (int j = 0; j < 122; j+=2) {
 				for (int i = 0; i < 122; i+=2) {
 					bool intersect = intersectCheck(edgesTemp[j], edgesTemp[j + 1], edgesTemp[i], edgesTemp[i + 1]);
@@ -210,20 +198,15 @@ private:
 					}
 				}
 			}
-			// if it's the first generated graph (beacuse the intersectPoints is initialized as 0)
-			// or the generated graph's crossing number is less then the previous one, 
-			// then change the old graph for the new one
+
 			if (intersectPoints == 0 || temp < intersectPoints) {
 				for (int i = 0; i < 50; i++) {
 					nodes2D[i] = nodes2DTemp[i];
 					nodes3D[i] = nodes3DTemp[i];
-					//printf("[%i.] %f x coordinate %f y coordinate\n", i, nodes2D[i].x, nodes2D[i].y);
 				}
 				for (int i = 0; i < 121; i+=2) {
 					edges[i] = edgesTemp[i];
-					//printf("%i %f:x %f:y   ---    %f:x %f:y\n", i, edgesTemp[i].x, edges[i].y, edgesTemp[i+1].x, edgesTemp[i+1].y);
 				}
-				//printf("%i <--- régi %i <----- új \n", intersectPoints, temp);
 				intersectPoints = temp;
 			}
 		}
@@ -231,19 +214,19 @@ private:
 	}
 
 	void generateTextures() {
-		int width = 8, height = 8;				// create checkerboard texture procedurally
+		int width = 8, height = 8;				
 		std::vector<vec4> image(width * height);
 
 		for (int i = 0; i < 50; i++) {				
 			for (int y = 0; y < height; y++) {
 				for (int x = 0; x < width; x++) {
-					float red = ((float)rand() / RAND_MAX);	//random red component
-					float green = ((float)rand() / RAND_MAX);		//random green component
-					float blue = ((float)rand() / RAND_MAX);		//random blue component
-					image[y * width + x] = vec4(red, green, blue, 1);			//creating an image, with the random color
+					float red = ((float)rand() / RAND_MAX);	
+					float green = ((float)rand() / RAND_MAX);		
+					float blue = ((float)rand() / RAND_MAX);		
+					image[y * width + x] = vec4(red, green, blue, 1);			
 				}
 			}
-			textures[i] = new Texture(width, height, image);		// add the image to the textures array
+			textures[i] = new Texture(width, height, image);		
 		}
 
 	}
@@ -257,11 +240,10 @@ private:
 
 	void updateEdges() {
 		int index = 0;
-		//adding the edges to the edges array according to the neighbour matrix
+		
 		for (int i = 0; i < 50; i++) {
 			for (int j = 0; j < 50; j++) {
 				if (neighbourMatrix[i][j] == 1) {
-					//printf("%i", index);
 					edges[index++] = nodes2D[i];
 					edges[index++] = nodes2D[j];
 				}
@@ -275,7 +257,6 @@ private:
 	}
 
 	void drawNodes() {
-		// Set color to (0, 1, 0) = green
 		changeColor(1.0f, 0.0f, 0.0f);
 
 		vec2 circlePoints[100];
@@ -325,7 +306,6 @@ private:
 
 
 		}
-
 		gpuProgram.setUniform(0, "colorOrTexture");
 	}
 
@@ -362,7 +342,6 @@ private:
 	//source: https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
 	bool intersectCheck(vec2 edge1Start, vec2 edge1End, vec2 edge2Start, vec2 edge2End) {
 
-		//if we want to compare the same two edges, return false
 		if (edge1Start.x == edge2Start.x && edge1Start.y == edge2Start.y
 			&& edge1End.x == edge2End.x && edge1End.y == edge2End.y) {
 			return false;
@@ -371,43 +350,29 @@ private:
 		float maxXedge1 = maximum(edge1Start.x, edge1End.x);		float minXedge1 = minimum(edge1Start.x, edge1End.x);
 		float maxXedge2 = maximum(edge2Start.x, edge2End.x);		float minXedge2 = minimum(edge2Start.x, edge2End.x);
 
-		// two line can't intersect if they have no common points on the x axis.
-		// the maximum of the minimums of the two points x coordinates has to be smaller
-		// than the mimimum of the maxiumums of the two points!
-		// otherwise there is no way for intersection
 		if (maximum(minXedge1, minXedge2) > minimum(maxXedge1, maxXedge2)) {
 			return false;
 		}
 
-		// the formulas are the following:
-		// f1(x) = A1*x + b1 = y
-		// f2(x) = A2*x + b2 = y
 		float A1 = 0, A2 = 0;
 
-		// gradient of edge1
+
 		if ((edge1Start.x - edge1End.x) != 0) {
 			A1 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
 		}
 
-		// gradient of edge2
+
 		if ((edge1Start.x - edge1End.x) != 0) {
 			A2 = (edge1Start.y - edge1End.y) / (edge1Start.x - edge1End.x);
 		}
 
-		// one random point of the line is required (now it is the start point in both cases):
 		float b1 = (edge1Start.y - A1 * edge1Start.x);
 		float b2 = (edge2Start.y - A2 * edge2Start.x);
 
-		// if they intersect, they intersect in P1 point (with xP, yP coordinates), which means:
-		// yP = A1 * xP + b1
-		// yP = A2 * xP + b2
-		// --> A1 * xP + b1 = A2 * xP + b2
-		// --> xP = (b2 - b1) / (A1 - A2)
 		float xP = 0.0f;
-		if (A1 - A2 != 0) {				// to avoid dividing by zero
+		if (A1 - A2 != 0) {				
 			float xP = (b2 - b1) / (A1 - A2);
 		}
-		
 
 		if ((xP < maximum(minXedge1, minXedge2)) || (xP > minimum(maxXedge1, maxXedge2))) {
 			return false;
@@ -418,8 +383,6 @@ private:
 
 	}
 
-	// I can't add new library, thus I created a minimum 
-	// and a maximum function, which are similar to std::min and std::max
 	float maximum(float a, float b) {
 		return (a < b) ? b : a;
 	}
@@ -451,7 +414,6 @@ private:
 		Q.y = vector.y / sqrtf(1.0f - (vector.x * vector.x) - (vector.y * vector.y));
 		Q.z = 1.0f / sqrtf(1.0f - (vector.x * vector.x) - (vector.y * vector.y));
 
-		//printf("%f Q MOUSE DELTA X  %f Q MOUSE DELTA Y   %f Q MOUSE DELTA Z\n", Q.x, Q.y, Q.z);
 		float distOQ = acoshf(-lorentz(Q, O));
 
 		if (distOQ != distOQ) {		// this will return true only if typeof(distQO) is NaN
@@ -469,8 +431,6 @@ private:
 		n.x = nodes3D[index].x;
 		n.y = nodes3D[index].y;
 		n.z = nodes3D[index].z;
-
-		//printf("FORCIKLUS        %i %f:x    %f:y    %f:z\n",i, n.x, n.y, n.z);
 
 		float distnm1 = acoshf(-lorentz(m1, n));
 
@@ -493,9 +453,6 @@ private:
 		nodes3D[index].x = n2.x;
 		nodes3D[index].y = n2.y;
 		nodes3D[index].z = n2.z;
-
-
-		//updateGraph();
 	}
 	
 };
@@ -559,15 +516,12 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 
 	if (cX * cX + cY * cY >= 1)
 		return;
-
-	//printf("%f x  %f y\n", oldMousePosition.x, oldMousePosition.y);
 	mousePosition.x = cX - oldMousePosition.x;
 	mousePosition.y = cY - oldMousePosition.y;
 
 	oldMousePosition.x = cX;
 	oldMousePosition.y = cY;
-	
-	//printf("\n%f : MOUSEDELTA.X     %f: MOUSEDELTA.Y\n", oldMousePosition.x, oldMousePosition.y);
+
 	graph->shift();
 	glutPostRedisplay();
 }
